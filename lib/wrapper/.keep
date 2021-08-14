@@ -1,0 +1,3 @@
+Wrapper for other Gems
+Do not call Gem methods directy in application code
+Define Wrapper for each gem and use It

@@ -20,7 +20,7 @@ module Blog
     # config.eager_load_paths << Rails.root.join("lib")
     config.autoload_paths << Rails.root.join("lib/")
 
-    # Load all the Middlewares
+    # Load all modules inside /lib
     Dir["#{Rails.root}/lib/**/*"].each do |file|
       require file if file.end_with?('.rb')
     end
