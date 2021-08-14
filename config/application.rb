@@ -17,6 +17,12 @@ module Blog
     # in config/environments, which are processed later.
     #
     # config.time_zone = "Central Time (US & Canada)"
-    # config.eager_load_paths << Rails.root.join("extras")
+    # config.eager_load_paths << Rails.root.join("lib")
+    config.autoload_paths << Rails.root.join("lib/")
+
+    # Load all the Middlewares
+    Dir["#{Rails.root}/lib/**/*"].each do |file|
+      require file if file.end_with?('.rb')
+    end
   end
 end

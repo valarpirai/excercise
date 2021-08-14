@@ -1,0 +1,21 @@
+default: &default
+  host: 127.0.0.1
+  port: 6379
+  db: 0
+  namespace: blog
+
+main: &main
+  development:
+    <<: *default
+    namespace: blog_dev
+
+  test:
+    <<: *default
+    namespace: blog_test
+
+  production:
+    <<: *default
+    namespace: blog
+
+rate_limit:
+  <<: *main
