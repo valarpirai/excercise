@@ -23,7 +23,10 @@ class BgWorker
             begin
               BgWorker.client.get_queues.each do |queue_name|
                 data = BgWorker.client.dequeue(queue_name)
-                BgWorker::Worker.new.perform(data) if data
+                if data
+                  klass = Object.const_get(data[:klass])
+                  klass.new.perform(data[:args])
+                end
               end
             rescue => e
               puts "Error occurred-> #{e.message}"
@@ -72,10 +75,11 @@ class BgWorker
     @queues = []
 
     class << self
-      def enqueue(queue, data = {})
+      def enqueue(klass, args = {})
         BgWorker.config.increase_counter
-        add_queue(queue)
-        BgWorker.config.store.rpush(queue, data)
+        add_queue(klass.queue)
+        args = { args: args, klass: klass.name }
+        BgWorker.config.store.rpush(klass.queue, args)
       end
 
       def dequeue(queue)
@@ -95,7 +99,29 @@ class BgWorker
     end
   end
 
-  class Worker
+  module Worker
+    @queue = :default
+    @retry = 0
+
+    def self.included(base)
+      base.extend(ClassMethods)
+    end
+
+    module ClassMethods
+      def bg_options(args = {})
+        @queue ||= args[:queue]
+        @retry ||= args[:retry]
+      end
+
+      def queue
+        @queue
+      end
+
+      def retry
+        @retry
+      end
+    end
+
     def perform(args)
       puts 'Performing..'
       puts args.inspect
@@ -106,3 +132,11 @@ class BgWorker
     end
   end
 end
+
+# Thread pool
+# Stats
+# Retry
+# Enqueue classes
+#
+
+# BgWorker.client.enqueue(NewWorker, { hello: :world })

@@ -18,7 +18,8 @@ module Blog
     #
     # config.time_zone = "Central Time (US & Canada)"
     # config.eager_load_paths << Rails.root.join("lib")
-    config.autoload_paths << Rails.root.join("lib/")
+    # config.autoload_paths << Rails.root.join("lib/")
+    config.autoload_paths << Rails.root.join("app", "workers")
 
     # Load all modules inside /lib
     Dir["#{Rails.root}/lib/**/*"].each do |file|
