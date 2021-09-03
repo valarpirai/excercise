@@ -1,6 +1,6 @@
 require 'concurrent-ruby'
 
-class BgWorker
+module BgWorker
   class << self
     def client
       Client
@@ -19,21 +19,16 @@ class BgWorker
         puts 'started..'
         while true
           # Iterate all the queue
-          if BgWorker.config.count > 0
-            begin
-              BgWorker.client.get_queues.each do |queue_name|
-                data = BgWorker.client.dequeue(queue_name)
-                if data
-                  klass = Object.const_get(data[:klass])
-                  klass.new.perform(data[:args])
-                end
+          begin
+            data = BgWorker.client.dequeue(*BgWorker.client.get_queues)
+            @@pool.post do
+              if data
+                klass = Object.const_get(data[:klass])
+                klass.new.perform(data[:args])
               end
-            rescue => e
-              puts "Error occurred-> #{e.message}"
             end
-          else
-            # puts 'sleeping..'
-            sleep 1
+          rescue => e
+            puts "Error occurred-> #{e.message}"
           end
         end
       end
@@ -46,22 +41,13 @@ class BgWorker
 
   class Config
     @config = {
-      store: nil,
-      count: 0
+      store: nil
     }
 
     @config.each do |key, _value|
       define_singleton_method key do
         @config[key]
       end
-    end
-
-    def self.increase_counter
-      @config[:count] += 1
-    end
-
-    def self.decrease_counter
-      @config[:count] -= 1
     end
 
     def self.update(opts = {})
@@ -72,19 +58,21 @@ class BgWorker
 
   class Client
     QUEUE = 'queues'.freeze
+    JOB_COUNT = 'job_count'.freeze
     @queues = []
 
     class << self
       def enqueue(klass, args = {})
-        BgWorker.config.increase_counter
+        BgWorker.config.store.incr(JOB_COUNT)
         add_queue(klass.queue)
         args = { args: args, klass: klass.name }
-        BgWorker.config.store.rpush(klass.queue, args)
+        BgWorker.config.store.lpush(klass.queue, args)
       end
 
       def dequeue(queue)
-        BgWorker.config.decrease_counter
-        data = BgWorker.config.store.lpop(queue)
+        return nil if BgWorker.config.store.decr(JOB_COUNT).to_i < 0
+        # brpop
+        data = BgWorker.config.store.brpop(queue)
         data ? eval(data) : data
       end
 
@@ -95,6 +83,10 @@ class BgWorker
 
       def get_queues
         @queues ||= BgWorker.config.store.smembers(QUEUE)
+      end
+
+      def job_count
+        BgWorker.config.store.get(JOB_COUNT)
       end
     end
   end
@@ -139,4 +131,6 @@ end
 # Enqueue classes
 #
 
+# USAGE:
 # BgWorker.client.enqueue(NewWorker, { hello: :world })
+# BgWorker.start

@@ -5,6 +5,7 @@ class NewWorker
   bg_options queue: :hello, retry: 2
 
   def perform(args)
-    puts "this is #{self.class.name}"
+    puts "Thread #{Thread.current.object_id} is #{self.class.name} #{args.inspect}"
+    
   end
 end
