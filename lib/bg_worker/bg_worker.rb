@@ -1,5 +1,8 @@
 require 'concurrent-ruby'
+require "connection_pool"
+require "redis"
 
+# Reuse code for BgWorker Server and Client
 module BgWorker
   class << self
     def client
@@ -12,6 +15,36 @@ module BgWorker
 
     def config=(opts)
       Config.update(opts)
+    end
+
+    def redis_connection_pool(options = {})
+      @connection_pool ||= begin
+        pool_timeout = options[:timeout] || 10
+        size = options[:concurrency].to_i + 5
+
+        ConnectionPool.new(timeout: pool_timeout, size: size) do
+          namespace = options[:namespace]
+          client = Redis.new(host: options['host'], port: options['port'], db: options['db'])
+          if namespace
+            begin
+              require "redis/namespace"
+              Redis::Namespace.new(namespace, redis: client)
+            rescue LoadError
+              Sidekiq.logger.error("Your Redis configuration uses the namespace '#{namespace}' but the redis-namespace gem is not included in the Gemfile." \
+                                  "Add the gem to your Gemfile to continue using a namespace. Otherwise, remove the namespace parameter.")
+              exit(-127)
+            end
+          else
+            client
+          end
+        end
+      end
+    end
+
+    def redis
+      redis_connection_pool.with do |conn|
+        yield conn
+      end
     end
 
     def start
@@ -63,66 +96,34 @@ module BgWorker
 
     class << self
       def enqueue(klass, args = {})
-        BgWorker.config.store.incr(JOB_COUNT)
+        BgWorker.redis { |conn| conn.incr(JOB_COUNT) }
         add_queue(klass.queue)
         args = { args: args, klass: klass.name }
-        BgWorker.config.store.lpush(klass.queue, args)
+        BgWorker.redis { |conn| conn.lpush(klass.queue, args) }
       end
 
       def dequeue(queue)
-        return nil if BgWorker.config.store.decr(JOB_COUNT).to_i < 0
+        return nil if BgWorker.redis { |conn| conn.decr(JOB_COUNT).to_i < 0 }
         # brpop
-        data = BgWorker.config.store.brpop(queue)
+        data = BgWorker.redis { |conn| conn.brpop(queue) }
         data ? eval(data) : data
       end
 
       def add_queue(queue_name)
-        BgWorker.config.store.sadd(QUEUE, queue_name)
+        BgWorker.redis { |conn| conn.sadd(QUEUE, queue_name) }
         @queues << queue_name
       end
 
       def get_queues
-        @queues ||= BgWorker.config.store.smembers(QUEUE)
+        @queues ||= BgWorker.redis { |conn| conn.smembers(QUEUE) }
       end
 
       def job_count
-        BgWorker.config.store.get(JOB_COUNT)
+        BgWorker.redis { |conn| conn.get(JOB_COUNT) }
       end
     end
   end
 
-  module Worker
-    @queue = :default
-    @retry = 0
-
-    def self.included(base)
-      base.extend(ClassMethods)
-    end
-
-    module ClassMethods
-      def bg_options(args = {})
-        @queue ||= args[:queue]
-        @retry ||= args[:retry]
-      end
-
-      def queue
-        @queue
-      end
-
-      def retry
-        @retry
-      end
-    end
-
-    def perform(args)
-      puts 'Performing..'
-      puts args.inspect
-      if args[:sleep]
-        sleep 5
-      end
-      puts 'End..'
-    end
-  end
 end
 
 # Thread pool
