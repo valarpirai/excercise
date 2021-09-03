@@ -42,6 +42,7 @@ module BgWorker
     end
 
     def redis
+      return unless block_given?
       redis_connection_pool.with do |conn|
         yield conn
       end
