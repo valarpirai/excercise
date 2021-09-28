@@ -1,3 +1,4 @@
+# All workers must include this module
 module BgWorker
   module Worker
     @queue = :default

@@ -1,6 +1,6 @@
 
 BgWorker.config = {
-  store: $redis_bg
+  redis: RedisConfig
 }
 
 

@@ -2,6 +2,8 @@ require_relative "boot"
 
 require "rails/all"
 
+require_relative '../lib/middleware/rate_limitter'
+
 # Require the gems listed in Gemfile, including any gems
 # you've limited to :test, :development, or :production.
 Bundler.require(*Rails.groups)
@@ -20,6 +22,8 @@ module Blog
     # config.eager_load_paths << Rails.root.join("lib")
     # config.autoload_paths << Rails.root.join("lib/")
     config.autoload_paths << Rails.root.join("app", "workers")
+
+    config.middleware.use Middleware::RateLimitter
 
     # Load all modules inside /lib
     Dir["#{Rails.root}/lib/**/*"].each do |file|

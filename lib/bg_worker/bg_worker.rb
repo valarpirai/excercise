@@ -3,6 +3,7 @@ require "connection_pool"
 require "redis"
 
 # Reuse code for BgWorker Server and Client
+# Read configs from yml file
 module BgWorker
   class << self
     def client
@@ -15,6 +16,19 @@ module BgWorker
 
     def config=(opts)
       Config.update(opts)
+      init
+    end
+
+    def init
+      @workers.each { |worker| worker.terminate } if @workers
+
+      @workers = []
+      config = {
+
+      }
+      BgWorker.config.concurrency.times do
+        @workers << JobProcessor.new(config)
+      end
     end
 
     def redis_connection_pool(options = {})
@@ -42,40 +56,24 @@ module BgWorker
     end
 
     def redis
-      return unless block_given?
-      redis_connection_pool.with do |conn|
-        yield conn
+      redis_connection_pool(config.redis).with do |conn|
+        yield conn block_given?
       end
     end
 
     def start
-      @@thread = Thread.new do
-        puts 'started..'
-        while true
-          # Iterate all the queue
-          begin
-            data = BgWorker.client.dequeue(*BgWorker.client.get_queues)
-            @@pool.post do
-              if data
-                klass = Object.const_get(data[:klass])
-                klass.new.perform(data[:args])
-              end
-            end
-          rescue => e
-            puts "Error occurred-> #{e.message}"
-          end
-        end
-      end
+      @workers.each { |worker| worker.start }
     end
 
     def stop
-      @@thread.join
+      @workers.each { |worker| worker.stop }
     end
   end
 
   class Config
     @config = {
-      store: nil
+      redis: nil,
+      concurrency: 5
     }
 
     @config.each do |key, _value|
@@ -125,6 +123,7 @@ module BgWorker
     end
   end
 
+  class Shutdown < Interrupt; end
 end
 
 # Thread pool
