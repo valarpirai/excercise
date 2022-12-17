@@ -22,6 +22,10 @@ services:
     image: mysql/mysql-server:8.0
     volumes:
       - db_data:/var/lib/mysql/data
+    environment:
+      MYSQL_USER: blog_user
+      MYSQL_PASSWORD: blog_password
+      MYSQL_DATABASE: blog_development
 
   redis:
     image: redis:5.0.7
